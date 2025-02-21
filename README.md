@@ -1,2 +1,4 @@
 # blacknight
 Sleep tracker
+
+init
