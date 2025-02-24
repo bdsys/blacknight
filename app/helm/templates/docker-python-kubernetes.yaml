@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    RoleType: netans
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+        RoleType: netans
+    spec:
+      containers:
+      - image:  "{{ .Values.image.repo }}@{{ .Values.image.digest }}"
+        name:  {{ .Release.Name }}
+        imagePullPolicy: Always
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_DB
+          value: example
+        - name: POSTGRES_SERVER
+          value: postgres
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: APP_NAME
+          value: ansible-runner-server
+        - name: USE_PROXY
+          value: 'false'
+        - name: PROXY_HOST
+          value: http://proxy.service.cnqr.tech:3128
+        - name: ENVIRONMENT_NAME
+          value: local
+        - name: INFORMATIONAL_SNS_TOPIC_ARN
+          value: tbd
+        - name: TEST_ENV_VAR
+          value: TeSt
+        ports:
+        - containerPort: 8000
+          name: app
+      restartPolicy: Always  
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-entrypoint
+  namespace: default
+spec:
+  type: NodePort
+  selector:
+    service: fastapi
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30001

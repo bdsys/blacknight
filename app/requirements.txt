@@ -1,0 +1,17 @@
+typing
+pydantic
+# Basic fastapi implementation
+# fastapi
+# Fully featured developer implementation
+fastapi[standard]
+pyjwt
+# Crypto version gives extended functionality to things like RSA and ECDSA
+# pyjwt[crypto]
+# bcrypt hashing algorithm pinned for passlib compatibility
+bcrypt==4.0.1
+# For password hashing
+passlib
+# TODO Build using bcrypt directly and remove passlib 
+## That way we don't need to pin bcrypt to 4.0.1
+## https://github.com/pyca/bcrypt/issues/684#issuecomment-1902590553
+# bycrypt

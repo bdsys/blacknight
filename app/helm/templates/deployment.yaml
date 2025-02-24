@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    RoleType: k8s
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+        RoleType: k8s
+    spec:
+      containers:
+      - image:  "{{ .Values.image.repo }}@{{ .Values.image.digest }}"
+        name:  {{ .Release.Name }}
+        ports:
+        - containerPort:  8080
+          name: app
+      restartPolicy: Always
