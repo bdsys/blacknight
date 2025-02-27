@@ -21,6 +21,9 @@ services:
       - POSTGRES_DB=example
       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
       - TEST_ENV_VAR=TeSt123!
+      # The below needs secrets storage!
+      - SECRET_KEY = "6208de85fc9b7794731ae49e88745ad853d2043b9f0b31ae6e21909bd3457313"
+      - ALGORITHM = "HS256"
 
 # Commented out database component
 #     depends_on:

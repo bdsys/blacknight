@@ -16,3 +16,6 @@ See README.Docker.md and README.ads.md
 http://localhost:8000
 http://localhost:8000/docs
 http://localhost:8000/redoc
+
+## Start FastAPI locally
+fastapi dev app.py
