@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import BaseModel
 from fastapi import Depends
 from peewee import *
@@ -9,7 +9,19 @@ class SignupUser(BaseModel):
     username: str
     email: str
     password: str
-    user_type: str = 'user'
+    user_type: Literal['user', 'practitioner'] = 'user'
+
+class UpdateUser(BaseModel):
+    username: str
+    email: str
+    full_name: str
+
+class UpdateUserType(BaseModel):
+    user_type: Literal['user', 'practitioner'] = 'user'
+
+class UpdatePassword(BaseModel):
+    existing_password: str
+    new_password: str
 
 class Token(BaseModel):
     access_token: str
@@ -18,6 +30,23 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: str | None = None
 
+class GetPractice(BaseModel):
+    practice_name: str
+
+class UpdatePractice(BaseModel):
+    practice_name: str
+    practice_address: str | None = None
+    practice_phone: str | None = None
+    practice_email: str | None = None
+    practice_website: str | None = None
+    practice_logo: str | None = None
+    practice_description: str | None = None
+    practice_hours: str | None = None
+    practice_services: str | None = None
+    practice_specialties: str | None = None
+    practice_insurance: str | None = None
+    practice_payment: str | None = None
+    practice_languages: str | None = None
 
 # SQL models -- peewee
 db = SqliteDatabase('database.db')
@@ -43,6 +72,19 @@ class Practice(Model):
     class Meta:
         database = db
 
+class PracticeJoinCodes(Model):
+    id = AutoField()
+    practice = ForeignKeyField(Practice, backref='join_codes')
+    join_code_1 = CharField(unique=True)
+    join_code_2 = CharField(unique=True)
+    join_code_3 = CharField(unique=True)
+    join_code_4 = CharField(unique=True)
+    join_code_5 = CharField(unique=True)
+    created = DateTimeField()
+
+    class Meta:
+        database = db
+
 class UserSql(Model):
     id = AutoField()
     username = CharField(unique=True)
@@ -52,10 +94,19 @@ class UserSql(Model):
     last_updated = DateField(default=date.today)
     disabled = BooleanField(default=True)
     hashed_password = CharField()
-    user_type = CharField(default='user')
-    associated_practice = ForeignKeyField(Practice, backref='users', null=True)
+    user_type = CharField(choices=[('user', 'User'), ('admin', 'Admin')], default='user')
+    associated_practices = ForeignKeyField(Practice, backref='users', null=True)
 
     class Meta:
+        database = db
+
+class UserToPractice(Model):
+    id = AutoField()
+    user = ForeignKeyField(UserSql)
+    practice = ForeignKeyField(Practice)
+
+    class Meta:
+        # CompositeKey('user', 'practice')
         database = db
 
 class BlackListedJwt(Model):
@@ -86,10 +137,18 @@ class IsiData(Model):
         database = db
 
 ## SQL engine
+def create_tables():
+    with db:
+        db.create_tables([
+            UserSql,
+            BlackListedJwt,
+            Practice,
+            PracticeJoinCodes,
+            UserToPractice,
+            SleepData,
+            IsiData
+        ])
+
 db.connect()
-db.create_tables([UserSql])
-db.create_tables([BlackListedJwt])
-db.create_tables([Practice])
-db.create_tables([SleepData])
-db.create_tables([IsiData])
+create_tables()
 db.close()

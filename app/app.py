@@ -2,14 +2,12 @@ from typing import Annotated, Any
 from datetime import timedelta, date
 
 
-from fastapi import Depends, FastAPI, HTTPException, status, Path, Query, Body, Request
+from fastapi import Depends, FastAPI, HTTPException, status, Path, Query, Body, Request, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import RedirectResponse
 
-from functions import \
-    return_time_object, get_current_active_user, authenticate_user, create_access_token, validate_email, validate_username, \
-    username_data_dupe_check, email_data_dupe_check, validate_password, create_user, delete_user, invalidate_jwt, logout_user, \
-    check_jwt_blacklist, validate_user_type, update_user
-from models import Token, SignupUser, UserSql
+from functions import *
+from models import *
 
 app = FastAPI()
 version_partition: str = 'v1'
@@ -136,6 +134,10 @@ async def signup_new_user(user: SignupUser) -> str:
             detail="Email already registered",
         )
 
+    # TODO remvove after creating database population script for dev environment
+    if user.username == 'test':
+        user.password = 'test'
+
     if create_user(username=user.username, email=user.email, password=user.password, user_type=user.user_type):
         print(f'User {user.username} has been created!')
     else:
@@ -145,13 +147,13 @@ async def signup_new_user(user: SignupUser) -> str:
             detail="An error has occured during signup. Please try again soon, sorry about that.",
         )
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, # sub "subject" of the token. It's optional, but can be used to convey credential information across systems
-        expires_delta=access_token_expires
-    )
+    # access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # access_token = create_access_token(
+    #     data={"sub": user.username}, # sub "subject" of the token. It's optional, but can be used to convey credential information across systems
+    #     expires_delta=access_token_expires
+    # )
 
-    return access_token
+    return 'OK'
 
 # Take a username and delete + invalidate JWT
 @app.delete("/users/me")
@@ -235,11 +237,114 @@ async def read_users_me(
             detail="Token has been invalidated",
         )
 
+    existing_user_value = get_user_record(current_user.username)
+
+    json_response_body = {
+        'username': existing_user_value.username,
+        'email': existing_user_value.email,
+        'full_name': existing_user_value.full_name,
+        'user_type': existing_user_value.user_type,
+        'joined': existing_user_value.joined,
+        'last_updated': existing_user_value.last_updated,
+        'associated_practices': existing_user_value.associated_practices,
+    }
+
+    # return current_user # too much exposed
+    return json_response_body
+
+@app.post("/users/me/password")
+async def update_users_me_password(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, password: UpdatePassword,
+):
+    print(f'Entering POST /users/me/password')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    print(f'Entering POST /users/me/password')
+    print(f'User: {current_user}')
+    
+    password_validation_results = validate_password(password.new_password)
+    if password_validation_results:
+        raise HTTPException(
+            status_code=400,
+            detail=password_validation_results,
+        )
+    else:
+        print(f'No password validation errors for string: {password.new_password}')
+
+    if update_password(username=current_user.username, existing_password=password.existing_password, new_password=password.new_password):
+        print(f'User {current_user.username} password has been updated!')
+    else:
+        print(f'User {current_user.username} password update failed!')
+        raise HTTPException(
+            status_code=500,
+            detail="An error has occured during signup. Please try again soon, sorry about that.",
+        )
+
     return current_user
+
+@app.post("/users/me/type")
+async def update_users_me_type(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, user_type: str, verification: bool = False,
+):
+    print(f'Entering POST /users/me/type')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    print(f'Entering POST /users/me/type')
+    print(f'User: {current_user}')
+    
+    if validate_user_type(user_type):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user type",
+        )
+    else:
+        print(f'User type is valid: {user_type}')
+
+    if verification:
+        if update_user_type(username=current_user.username, user_type=user_type):
+            print(f'User {current_user.username} user type has been updated!')
+        else:
+            print(f'User {current_user.username} user type update failed!')
+            raise HTTPException(
+                status_code=500,
+                detail="An error has occured during signup. Please try again soon, sorry about that.",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Please confirm you want to change your user type",
+        )
+
+    existing_user_value = get_user_record(current_user.username)
+
+    json_response_body = {
+        'username': existing_user_value.username,
+        'email': existing_user_value.email,
+        'full_name': existing_user_value.full_name,
+        'user_type': existing_user_value.user_type,
+        'joined': existing_user_value.joined,
+        'last_updated': existing_user_value.last_updated,
+        'associated_practices': existing_user_value.associated_practices,
+    }
+
+    # return current_user # too much exposed
+    return json_response_body
 
 @app.post("/users/me")
 async def update_users_me(
-    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, user: SignupUser,
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, user: UpdateUser,
 ):
     print(f'Entering POST /users/me')
     bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
@@ -249,58 +354,39 @@ async def update_users_me(
             status_code=401,
             detail="Token has been invalidated",
         )
+
+    print(f'Entering POST /users/me')
+    print(f'User: {current_user}')
     
-    if user.password:
-        password_validation_results = validate_password(user.password)
-        if password_validation_results:
-            print(f'Password validation errors for string: {user.password}')
-            raise HTTPException(
-                status_code=400,
-                detail=password_validation_results,
-            )
-        else:
-            print(f'No password validation errors for string: {user.password}')
+    username_validation_results = validate_username(user.username)
+    if username_validation_results:
+        raise HTTPException(
+            status_code=400,
+            detail=username_validation_results,
+        )
     else:
-        print(f'No password provided for user update: {current_user.username}')
-        user.password = current_user.password
+        print(f'Username is valid: {user.username}')
 
-    if user.username:
-        username_validation_results = validate_username(user.username)
-        if username_validation_results:
-            raise HTTPException(
-                status_code=400,
-                detail=username_validation_results,
-            )
-        else:
-            print(f'Username is valid: {user.username}')
+    email_validation_results = validate_email(user.email)
+    if email_validation_results:
+        raise HTTPException(
+            status_code=400,
+            detail=email_validation_results,
+        )
     else:
-        print(f'No username provided for user update: {current_user.username}')
-        user.username = current_user.username
+        print(f'Email is valid: {user.email}')
 
-    if user.email:
-        email_validation_results = validate_email(user.email)
-        if email_validation_results:
-            raise HTTPException(
-                status_code=400,
-                detail=email_validation_results,
-            )
-        else:
-            print(f'Email is valid: {user.email}')
+    if validate_full_name(user.full_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid full name",
+        )
     else:
-        print(f'No email provided for user update: {current_user.username}')
-        user.email = current_user.email
+        print(f'Full name is valid: {user.full_name}')
 
-    if user.user_type:
-        if validate_user_type(user.user_type):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid user type",
-            )
-    else:
-        print(f'No user type provided for user update: {current_user.username}')
-        user.user_type = current_user.user_type
+    updated_user_value = update_user(existing_username=current_user.username, username=user.username, email=user.email, full_name=user.full_name)
 
-    if update_user(username=user.username, email=user.email, password=user.password, user_type=user.user_type):
+    if updated_user_value:
         print(f'User {user.username} has been updated!')
     else:
         print(f'User {user.username} update failed!')
@@ -308,12 +394,19 @@ async def update_users_me(
             status_code=500,
             detail="An error has occured during signup. Please try again soon, sorry about that.",
         )
+    
+    json_response_body = {
+        'username': updated_user_value.username,
+        'email': updated_user_value.email,
+        'full_name': updated_user_value.full_name,
+    }
 
-    return current_user
+    return json_response_body
 
-@app.get("/users/me/items/")
-async def read_own_items(
-    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request,
+
+### Practice screens
+@app.get("/practices/details")
+async def read_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str
 ):
     bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
     print(f'Bearer token from request header: {bearer_token_from_request_header}')
@@ -323,5 +416,166 @@ async def read_own_items(
             detail="Token has been invalidated",
         )
 
-    return [{"item_id": "Foo", "owner": current_user.username}]
+    practice_value = get_practice_record(practice_name)
+    if practice_value:
+        json_response_body = {
+            'practice_name': practice_value.practice_name,
+            'practice_address': practice_value.practice_address,
+            'practice_phone': practice_value.practice_phone,
+            'practice_email': practice_value.practice_email,
+            'practice_website': practice_value.practice_website,
+            'practice_logo': practice_value.practice_logo,
+            'practice_description': practice_value.practice_description,
+            'practice_hours': practice_value.practice_hours,
+            'practice_services': practice_value.practice_services,
+            'practice_specialties': practice_value.practice_specialties,
+            'practice_insurance': practice_value.practice_insurance,
+            'practice_payment': practice_value.practice_payment,
+            'practice_languages': practice_value.practice_languages,
+        }
+        return json_response_body
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Practice does not exist",
+        )
 
+@ app.post("/practice/create")
+async def create_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, get_practice_data: GetPractice
+):
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+    
+    user_type_check = get_user_record(current_user.username).user_type
+    print(f'User type check: {user_type_check}')
+    if user_type_check != 'practitioner':
+        raise HTTPException(
+            status_code=401,
+            detail="User is not a practitioner",
+        )
+
+    # Validations
+    validate_practice_name_return = validate_practice_name(get_practice_data.practice_name)
+    if validate_practice_name_return:
+        raise HTTPException(
+            status_code=400,
+            detail=validate_practice_name_return,
+        )
+    else:
+        print(f'Practice name is valid: {get_practice_data.practice_name}')
+
+
+    if create_practice_record(get_practice_data.practice_name):
+        print(f'Practice {get_practice_data.practice_name} has been created!')
+    else:
+        print(f'Practice {get_practice_data.practice_name} creation failed!')
+        raise HTTPException(
+            status_code=500,
+            detail="An error has occured during practice creation. Please try again soon, sorry about that.",
+        )
+    
+    return 'OK'
+
+@app.post('/practice/delete')
+async def delete_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, get_practice_data: GetPractice, verification: bool = False
+):
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    if check_user_association_with_practice(current_user.username, get_practice_data.practice_name):
+        user_type_check = get_user_record(current_user.username).user_type
+        if user_type_check == 'practitioner':
+            if verification:
+                if delete_practice_record(get_practice_data.practice_name):
+                    print(f'Practice {get_practice_data.practice_name} has been deleted!')
+                    return 'OK'
+                else:
+                    print(f'Practice {get_practice_data.practice_name} deletion failed!')
+                    raise HTTPException(
+                        status_code=500,
+                        detail="An error has occured during practice deletion. Please try again soon, sorry about that.",
+                    )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Please confirm you want to delete this practice",
+                )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="User is not a practitioner",
+            )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="User is not associated with this practice",
+        )
+
+@app.post('/practice/update')
+async def update_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, existing_practice_name: str, practice_data: UpdatePractice
+):
+    print(f'Entering POST /practice/update')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    if check_user_association_with_practice(current_user.username, practice_data.practice_name):
+        user_type_check = get_user_record(current_user.username).user_type
+        if user_type_check == 'practitioner':
+            existing_practice_record = get_practice_record(existing_practice_name)
+            if existing_practice_record:                
+                if update_practice_record(existing_practice_record.id, practice_data):
+                    print(f'Practice {practice_data.practice_name} has been updated!')
+
+                    updated_practice_value = get_practice_record(practice_data.practice_name)
+                    json_response_body = {
+                        'practice_name': updated_practice_value.practice_name,
+                        'practice_address': updated_practice_value.practice_address,
+                        'practice_phone': updated_practice_value.practice_phone,
+                        'practice_email': updated_practice_value.practice_email,
+                        'practice_website': updated_practice_value.practice_website,
+                        'practice_logo': updated_practice_value.practice_logo,
+                        'practice_description': updated_practice_value.practice_description,
+                        'practice_hours': updated_practice_value.practice_hours,
+                        'practice_services': updated_practice_value.practice_services,
+                        'practice_specialties': updated_practice_value.practice_specialties,
+                        'practice_insurance': updated_practice_value.practice_insurance,
+                        'practice_payment': updated_practice_value.practice_payment,
+                        'practice_languages': updated_practice_value.practice_languages,
+                    }
+                    return json_response_body
+                else:
+                    print(f'Practice {practice_data.practice_name} update failed!')
+                    raise HTTPException(
+                        status_code=500,
+                        detail="An error has occured during practice update. Please try again soon, sorry about that.",
+                    )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Practice does not exist",
+                )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="User is not a practitioner",
+            )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="User is not associated with this practice",
+        )

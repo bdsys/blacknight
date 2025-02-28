@@ -8,7 +8,7 @@ import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-from models import TokenData, UserSql, BlackListedJwt
+from models import *
 
 # OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -42,6 +42,22 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def get_user_record(username: str):
+    user_query = UserSql.select().where(UserSql.username == username)
+    if user_query.exists():
+        for user in user_query:
+            return user
+    else:
+        return None
+    
+def get_practice_record(practice_name: str):
+    practice_query = Practice.select().where(Practice.practice_name == practice_name)
+    if practice_query.exists():
+        for practice in practice_query:
+            return practice
+    else:
+        return None
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
@@ -101,6 +117,17 @@ def username_data_dupe_check(username: str):
     else:
         print(f'Username {username} is not in SQL DB')
         return False
+    
+def practice_name_data_dupe_check(practice_name: str):
+    practice_query = Practice.select().where(Practice.practice_name == practice_name)
+    if practice_query.exists():
+        print(f'Practice name {practice_name} is in SQL DB')
+        for practice_name in practice_query:
+            print(f'Practice name: {practice_name}')
+        return True
+    else:
+        print(f'Practice name {practice_name} is not in SQL DB')
+        return False
 
 def email_data_dupe_check(email: str):
     email_query = UserSql.select().where(UserSql.email == email)
@@ -112,6 +139,14 @@ def email_data_dupe_check(email: str):
     else:
         print(f'Email {email} is not in SQL DB')
         return False
+    
+def check_changed_usernames(username: str):
+    user_query = UserSql.select().where(UserSql.username == username)
+    if user_query.exists():
+        for user in user_query:
+            return user
+    else:
+        return None
     
 def validate_username(username: str):
     print(f'Staring username validation for string: {username}')
@@ -137,6 +172,61 @@ def validate_username(username: str):
         else:
             print(f'No username validation errors for string: {username}')
         return username_validation_error
+    
+def validate_practice_name(practice_name: str):
+    print(f'Staring practice name validation for string: {practice_name}')
+    practice_name_validation_error: list[str] = []
+    if practice_name:
+        if len(practice_name) >= 2:
+            pass
+            print(f'Practice name is at least 2 characters long')
+        else:
+            practice_name_validation_error.append('Practice name must be at least 2 characters long')
+            print(f'Practice name validation error for string: {practice_name}')
+            print('Practice name must be at least 2 characters long')
+        if len(practice_name) <= 50:
+            pass
+            print(f'Practice name is at most 50 characters long')
+        else:
+            practice_name_validation_error.append('Practice name cannot be any more than 50 characters long')
+            print(f'Practice name validation error for string: {practice_name}')
+            print('Practice name cannot be any more than 50 characters long')
+
+        if practice_name_data_dupe_check(practice_name):
+            practice_name_validation_error.append('Practice name is already in use')
+            print(f'Practice name validation error for string: {practice_name}')
+            print('Practice name is already in use')
+
+        if practice_name_validation_error:
+            print(practice_name_validation_error)
+        else:
+            print(f'No practice name validation errors for string: {practice_name}')
+        return practice_name_validation_error
+    
+def validate_full_name(full_name: str):
+    print(f'Staring full name validation for string: {full_name}')
+    full_name_validation_error: list[str] = []
+    if full_name:
+        if len(full_name) >= 2:
+            pass
+            print(f'Full name is at least 2 characters long')
+        else:
+            full_name_validation_error.append('Full name must be at least 2 characters long')
+            print(f'Full name validation error for string: {full_name}')
+            print('Full name must be at least 2 characters long')
+        if len(full_name) <= 50:
+            pass
+            print(f'Full name is at most 50 characters long')
+        else:
+            full_name_validation_error.append('Full name cannot be any more than 50 characters long')
+            print(f'Full name validation error for string: {full_name}')
+            print('Full name cannot be any more than 50 characters long')
+
+        if full_name_validation_error:
+            print(full_name_validation_error)
+        else:
+            print(f'No full name validation errors for string: {full_name}')
+        return full_name_validation_error
     
 def validate_email(email: str):
     print(f'Staring email validation for string: {email}')
@@ -263,23 +353,100 @@ def create_user(username: str, email: str, password: str, user_type: str):
         print(f'User {username} has not been saved to SQL DB')
         return False
     
-def update_user(username: str, email: str, password: str, user_type: str):
-    hashed_password = get_password_hash(password)
-    existing_user_lookup = UserSql.select(UserSql.id).where(UserSql.username == username)
-    existing_user = existing_user_lookup.get()
-
-    existing_user.username=username,
-    existing_user.email=email,
-    existing_user.last_updated=date.today(),
-    existing_user.disabled=False,
-    existing_user.hashed_password=hashed_password,
-    existing_user.type=user_type,
-
-    if existing_user.save() == 1:
-        print(f'User {username} has been saved to SQL DB')
+def create_practice_record(practice_name: str):
+    new_practice = Practice(
+        practice_name=practice_name,
+        created = date.today(),
+    )
+    if new_practice.save() == 1:
+        print(f'Practice {practice_name} has been saved to SQL DB')
         return True
     else:
+        print(f'Practice {practice_name} has not been saved to SQL DB')
+        return False
+    
+def update_user(existing_username: str, username: str, email: str, full_name: str):
+
+    # Getting a user to read some data. Couldn't get this to work for updating existing records
+    # existing_user = UserSql.select().where(UserSql.username == existing_username).get()
+    # existing_user = UserSql.get(UserSql.username == existing_username)
+    # grandma = Person.select().where(Person.name == 'Grandma L.').get()
+    # grandma = Person.get(Person.name == 'Grandma L.')
+
+    # Updating a record by specifying which columns to update, then which user to update then executing the query
+    # update_query = Entry.update(published=True).where(pub_date__lt=datetime.today())
+    # update_query.execute()
+    update_existing_user = UserSql.update(
+        username=username,
+        email=email,
+        full_name=full_name,
+        last_updated=date.today(),
+    ).where(UserSql.username == existing_username)
+    execute_update = update_existing_user.execute()
+
+    # if existing_user.save() == 1:
+    if execute_update:
+        print(f'User {username} has been saved to SQL DB')
+        return get_user_record(username)
+    else:
         print(f'User {username} has not been saved to SQL DB')
+        return None
+    
+def update_practice_record(existing_practice_id: int, practice: UpdatePractice):
+    update_existing_practice = Practice.update(
+        practice_name=practice.practice_name,
+        practice_address=practice.practice_address,
+        practice_phone=practice.practice_phone,
+        practice_email=practice.practice_email,
+        practice_website=practice.practice_website,
+        practice_logo=practice.practice_logo,
+        practice_description=practice.practice_description,
+        practice_hours=practice.practice_hours,
+        practice_services=practice.practice_services,
+        practice_specialties=practice.practice_specialties,
+        practice_insurance=practice.practice_insurance,
+        practice_payment=practice.practice_payment,
+        practice_languages=practice.practice_languages,
+    ).where(Practice.id == existing_practice_id,)
+    execute_update = update_existing_practice.execute()
+    if execute_update:
+        print(f'Practice {practice.practice_name} has been updated')
+        return True
+    else:
+        print(f'Practice {practice.practice_name} has not been updated')
+        return False
+
+def update_password(username: str, existing_password: str, new_password: str):
+    # Check if the existing password matches the one in the database
+    if verify_password(existing_password, UserSql.hashed_password):
+        # If it matches, hash the new password and update the user record
+        hashed_new_password = get_password_hash(new_password)
+        update_existing_password = UserSql.update(
+            hashed_password=hashed_new_password,
+            last_updated=date.today(),
+        ).where(UserSql.username == username)
+        execute_update = update_existing_password.execute()
+        if execute_update:
+            print(f'Password has been updated')
+            return True
+        else:
+            print(f'Password has not been updated')
+            return False
+    else:
+        print(f'Password does not match')
+        return False
+    
+def update_user_type(username: str, user_type: str):
+    update_existing_user_type = UserSql.update(
+        user_type=user_type,
+        last_updated=date.today(),
+    ).where(UserSql.username == username)
+    execute_update = update_existing_user_type.execute()
+    if execute_update:
+        print(f'User type has been updated')
+        return True
+    else:
+        print(f'User type has not been updated')
         return False
 
 def delete_user(username: str):
@@ -291,6 +458,21 @@ def delete_user(username: str):
         return True
     else:
         print(f'User {username} has not been deleted from SQL DB')
+        return False
+    
+def delete_practice_record(practice_name: str):
+    if get_practice_record(practice_name):
+        practice_id = Practice.select(Practice.id).where(Practice.practice_name == practice_name)
+        practice_id = practice_id.get()
+        if practice_id:
+            practice_id.delete_instance()
+            print(f'Practice {practice_name} has been deleted from SQL DB')
+            return True
+        else:
+            print(f'Practice {practice_name} has not been deleted from SQL DB')
+            return False
+    else:
+        print(f'Practice {practice_name} does not exist in SQL DB')
         return False
     
 def invalidate_jwt(jwt: str):
@@ -328,3 +510,37 @@ def logout_user(jwt: str):
     else:
         print(f'User has not been logged out')
         return False
+    
+# TODO this functionality is not yet implemented, and this function isn't quite ready
+# def check_user_association_with_practice(username: str, practice_name: str):
+
+#     # query = (Student
+#     #      .select()
+#     #      .join(StudentCourse)
+#     #      .join(Course)
+#     #      .where(Course.name == 'math'))
+
+#     association_check_query = (UserSql
+#         .select()
+#         .join(UserToPractice)
+#         .join(Practice)
+#         .where(UserSql.username == username)
+#     )
+
+      # TODO this logic needs to check the the practice names returned in the query contain the 
+      # practice_name passed in as an argument      
+#     # user_query = UserSql.select().where(UserSql.username == username)
+#     if association_check_query.exists():
+#         for user in association_check_query:
+#             if user.associated_practices:
+#                 print(f'User {username} is associated with a practice')
+#                 return True
+#             else:
+#                 print(f'User {username} is not associated with a practice')
+#                 return False
+#     else:
+#         print(f'User {username} is not in SQL DB')
+#         return False
+
+def check_user_association_with_practice(username: str, pactice_name: str):
+    return True
