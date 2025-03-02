@@ -1,3 +1,15 @@
+### Docker dev server commands
+# Build and run a container in "detached" mode
+docker compose up --build -d
+# Show running containers
+docker ls
+# Stop a running container
+docker stop app-server-1
+# Remove a running container
+docker rm app-server-1
+# Read logs from a running container
+docker logs app-server-1
+
 ### Building and running your application
 
 When you're ready, start your application by running:
