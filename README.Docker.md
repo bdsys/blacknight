@@ -7,6 +7,8 @@ docker ls
 docker stop app-server-1
 # Remove a running container
 docker rm app-server-1
+# Read logs from a running container
+docker logs app-server-1
 
 ### Building and running your application
 
