@@ -246,7 +246,6 @@ async def read_users_me(
         'user_type': existing_user_value.user_type,
         'joined': existing_user_value.joined,
         'last_updated': existing_user_value.last_updated,
-        'associated_practices': existing_user_value.associated_practices,
     }
 
     # return current_user # too much exposed
@@ -336,7 +335,6 @@ async def update_users_me_type(
         'user_type': existing_user_value.user_type,
         'joined': existing_user_value.joined,
         'last_updated': existing_user_value.last_updated,
-        'associated_practices': existing_user_value.associated_practices,
     }
 
     # return current_user # too much exposed
@@ -405,7 +403,7 @@ async def update_users_me(
 
 
 ### Practice screens
-@app.get("/practices/details")
+@app.get("/practice/details")
 async def read_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str
 ):
     bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
@@ -417,6 +415,22 @@ async def read_practice(current_user: Annotated[UserSql, Depends(get_current_act
         )
 
     practice_value = get_practice_record(practice_name)
+
+    associated_users = get_associated_users_from_practice(practice_name)
+
+    username_and_practice_type_list = []
+    for username in associated_users:
+        user_type = get_practice_user_type(username, practice_name)
+        print(f'User type for {username} is {user_type}')
+        username_and_practice_type_list.append({
+            'username': username,
+            'user_type': user_type,
+        })
+
+
+    # TODO only return this is the user is associated as an owner
+    practice_join_codes = get_practice_join_codes(practice_name)
+        
     if practice_value:
         json_response_body = {
             'practice_name': practice_value.practice_name,
@@ -432,6 +446,9 @@ async def read_practice(current_user: Annotated[UserSql, Depends(get_current_act
             'practice_insurance': practice_value.practice_insurance,
             'practice_payment': practice_value.practice_payment,
             'practice_languages': practice_value.practice_languages,
+            # 'associated_users': associated_users,
+            'associated_users': username_and_practice_type_list,
+            'join_codes': practice_join_codes,
         }
         return json_response_body
     else:
@@ -478,10 +495,21 @@ async def create_practice(current_user: Annotated[UserSql, Depends(get_current_a
             status_code=500,
             detail="An error has occured during practice creation. Please try again soon, sorry about that.",
         )
+
+    if create_practice_join_codes(get_practice_data.practice_name):
+        print(f'Practice {get_practice_data.practice_name} join codes have been created!')
+    else:
+        print(f'Practice {get_practice_data.practice_name} join codes creation failed!')
+        raise HTTPException(
+            status_code=500,
+            detail="An error has occured during practice join codes creation. Please try again soon, sorry about that.",
+        )
+
+    add_user_to_practice(current_user.username, get_practice_data.practice_name)
     
     return 'OK'
 
-@app.post('/practice/delete')
+@app.delete('/practice/delete')
 async def delete_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, get_practice_data: GetPractice, verification: bool = False
 ):
     bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
@@ -579,3 +607,147 @@ async def update_practice(current_user: Annotated[UserSql, Depends(get_current_a
             status_code=401,
             detail="User is not associated with this practice",
         )
+
+@app.post('/practice/associate')
+async def associate_user_with_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str, username_to_add: str, join_code: str
+):
+    print(f'Entering POST /practice/associate')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    user_type_check = get_user_record(current_user.username).user_type
+    print(f'User type check: {user_type_check}')
+    if user_type_check != 'practitioner':
+        raise HTTPException(
+            status_code=401,
+            detail="User is not a practitioner",
+        )
+
+    if check_user_association_with_practice(current_user.username, practice_name):
+        if validate_join_code(join_code, practice_name):
+            if check_user_association_with_practice(username_to_add, practice_name):
+                raise HTTPException(
+                    status_code=400,
+                    detail="User is already associated with this practice",
+                )
+            if add_user_to_practice(username_to_add, practice_name):
+                print(f'User {username_to_add} has been associated with practice {practice_name}!')
+                return 'OK'
+            else:
+                print(f'User {username_to_add} association with practice {practice_name} failed!')
+                raise HTTPException(
+                    status_code=500,
+                    detail="An error has occured during association. Please try again soon, sorry about that.",
+                )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid join code",
+            )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="User is not associated with this practice",
+        )
+
+@app.delete('/practice/associate')
+async def disassociate_user_with_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str, username_to_remove: str
+):
+    print(f'Entering DELETE /practice/associate')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    user_type_check = get_user_record(current_user.username).user_type
+    print(f'User type check: {user_type_check}')
+    if user_type_check != 'practitioner':
+        raise HTTPException(
+            status_code=401,
+            detail="User is not a practitioner",
+        )
+
+    if check_user_association_with_practice(current_user.username, practice_name):
+        disassociate_user_response = disassociate_user_from_practice(username_to_remove, practice_name)
+        if disassociate_user_response:
+            return disassociate_user_response
+        else:
+            print(f'User {username_to_remove} disassociation with practice {practice_name} failed!')
+            raise HTTPException(
+                status_code=500,
+                detail="An error has occured during disassociation. Please try again soon, sorry about that.",
+            )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="User is not associated with this practice",
+        )
+
+@app.post('/practice/associate/change')
+async def change_association_user_with_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str, username_to_modify: str, verficiation: bool = False, association_type: str = 'member'
+):
+    print(f'Entering POST /practice/associate/change')
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+    if verficiation:
+        user_type_check = get_user_record(current_user.username).user_type
+        print(f'User type check: {user_type_check}')
+        if user_type_check != 'practitioner':
+            raise HTTPException(
+                status_code=401,
+                detail="User is not a practitioner",
+            )
+
+        if check_user_association_with_practice(current_user.username, practice_name):
+            change_user_response = change_user_association_with_practice(username_to_modify, practice_name, association_type)
+            if change_user_association_with_practice(username_to_modify, practice_name, association_type):
+                return change_user_response
+            else:
+                print(f'User {username_to_modify} change association with practice {practice_name} failed!')
+                raise HTTPException(
+                    status_code=500,
+                    detail="An error has occured during change association. Please try again soon, sorry about that.",
+                )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="User is not associated with this practice",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Please confirm you want to change this association",
+        )
+
+# User sleep data screens
+@app.post("/users/me/isidata")
+async def create_user_isi_data_post(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, isi_data: CreateIsiData
+):
+    print(f'Entering POST /users/me/isidata')
+    print(f'User: {current_user}')
+    print(f'IsiData: {isi_data}')
+
+    if create_user_isi_data(current_user.username, isi_data.date, isi_data.score):
+        print(f'User {current_user.username} ISI data has been created!')
+    else:
+        print(f'User {current_user.username} ISI data creation failed!')
+        raise HTTPException(
+            status_code=500,
+            detail="An error has occured during ISI data creation. Please try again soon, sorry about that.",
+        )
+
+    return 'OK'

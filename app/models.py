@@ -48,13 +48,33 @@ class UpdatePractice(BaseModel):
     practice_payment: str | None = None
     practice_languages: str | None = None
 
+class CreateIsiData(BaseModel):
+    username: str
+    date: date
+    score: int
+
 # SQL models -- peewee
 db = SqliteDatabase('database.db')
 ## Classes
 
+class UserSql(Model):
+    id = AutoField()
+    username = CharField(unique=True)
+    email = CharField(unique=True)
+    full_name = CharField(null=True)
+    joined = DateField()
+    last_updated = DateField(default=date.today)
+    disabled = BooleanField(default=True)
+    hashed_password = CharField()
+    user_type = CharField(choices=[('user', 'User'), ('admin', 'Admin')], default='user')
+
+    class Meta:
+        database = db
+
 class Practice(Model):
     id = AutoField()
     created = DateTimeField()
+    last_updated = DateField(default=date.today)
     practice_name = CharField(null=True)
     practice_address = CharField(null=True)
     practice_phone = CharField(null=True)
@@ -68,6 +88,7 @@ class Practice(Model):
     practice_insurance = TextField(null=True)
     practice_payment = TextField(null=True)
     practice_languages = TextField(null=True)
+    # associated_users = ForeignKeyField(UserSql, backref='practices', null=True)
 
     class Meta:
         database = db
@@ -85,25 +106,12 @@ class PracticeJoinCodes(Model):
     class Meta:
         database = db
 
-class UserSql(Model):
-    id = AutoField()
-    username = CharField(unique=True)
-    email = CharField(unique=True)
-    full_name = CharField(null=True)
-    joined = DateField()
-    last_updated = DateField(default=date.today)
-    disabled = BooleanField(default=True)
-    hashed_password = CharField()
-    user_type = CharField(choices=[('user', 'User'), ('admin', 'Admin')], default='user')
-    associated_practices = ForeignKeyField(Practice, backref='users', null=True)
-
-    class Meta:
-        database = db
-
 class UserToPractice(Model):
     id = AutoField()
     user = ForeignKeyField(UserSql)
     practice = ForeignKeyField(Practice)
+    created = DateTimeField()
+    association_type = CharField(choices=[('owner', 'Owner'), ('member', 'Member')], default='member')
 
     class Meta:
         # CompositeKey('user', 'practice')

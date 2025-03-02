@@ -4,6 +4,8 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 import bcrypt
 import os
+import random
+import string
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -467,10 +469,11 @@ def delete_practice_record(practice_name: str):
         if practice_id:
             practice_id.delete_instance()
             print(f'Practice {practice_name} has been deleted from SQL DB')
-            return True
-        else:
-            print(f'Practice {practice_name} has not been deleted from SQL DB')
-            return False
+    
+        UserToPractice.delete().where(UserToPractice.practice == practice_id).execute()
+        print('All users associated with this practice have been deleted')
+        return True
+    
     else:
         print(f'Practice {practice_name} does not exist in SQL DB')
         return False
@@ -511,36 +514,226 @@ def logout_user(jwt: str):
         print(f'User has not been logged out')
         return False
     
-# TODO this functionality is not yet implemented, and this function isn't quite ready
-# def check_user_association_with_practice(username: str, practice_name: str):
+def add_user_to_practice(username: str, practice_name: str):
+    user = get_user_record(username)
+    practice = get_practice_record(practice_name)
+    if user and practice:
 
-#     # query = (Student
-#     #      .select()
-#     #      .join(StudentCourse)
-#     #      .join(Course)
-#     #      .where(Course.name == 'math'))
+        user_to_practice_association = UserToPractice(
+            user=user,
+            practice=practice,
+            created = date.today(),
+        )
 
-#     association_check_query = (UserSql
-#         .select()
-#         .join(UserToPractice)
-#         .join(Practice)
-#         .where(UserSql.username == username)
-#     )
+        if user_to_practice_association.save() == 1:
+            print(f'User {username} has been added to practice {practice_name}')
+            return True
+        else:
+            print(f'User {username} has not been added to practice {practice_name}')
+            return False
+    else:
+        print(f'User {username} or practice {practice_name} does not exist in SQL DB')
+        return False
+    
+def disassociate_user_from_practice(username: str, practice_name: str):
+    user = get_user_record(username)
+    practice = get_practice_record(practice_name)
+    if user and practice:
+        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
+        if user_to_practice_association.exists():
+            user_to_practice_association.get().delete_instance()
+            print(f'User {username} has been removed from practice {practice_name}')
+            return f'User {username} has been removed from practice {practice_name}'
+        else:
+            print(f'User {username} is not associated with practice {practice_name}')
+            return f'User {username} is not associated with practice {practice_name}'
+    else:
+        print(f'User {username} or practice {practice_name} does not exist in SQL DB')
+        return f'User {username} or practice {practice_name} does not exist in SQL DB'
 
-      # TODO this logic needs to check the the practice names returned in the query contain the 
-      # practice_name passed in as an argument      
-#     # user_query = UserSql.select().where(UserSql.username == username)
-#     if association_check_query.exists():
-#         for user in association_check_query:
-#             if user.associated_practices:
-#                 print(f'User {username} is associated with a practice')
-#                 return True
-#             else:
-#                 print(f'User {username} is not associated with a practice')
-#                 return False
-#     else:
-#         print(f'User {username} is not in SQL DB')
-#         return False
+def check_user_association_with_practice(username: str, practice_name: str):
 
-def check_user_association_with_practice(username: str, pactice_name: str):
-    return True
+    user_record = get_user_record(username)
+    practice_record = get_practice_record(practice_name)
+
+    if practice_record and user_record:
+        associated_users_query= (UserSql.select()
+            .join(UserToPractice, on=UserToPractice.user)
+            .where(UserToPractice.practice == practice_record and UserToPractice.user == user_record)
+            .order_by(UserSql.username))
+
+        if associated_users_query.exists():
+            for user in associated_users_query:
+                if user.username == username:
+                    print(f'User {username} is associated with practice {practice_name}')
+                    return True
+                    # return False
+            print(f'User {username} is not associated with practice {practice_name}')
+            return False
+        else:
+            print(f'No users are associated with practice {practice_name}')
+            return False
+
+def get_associated_users_from_practice(practice_name: str):
+    practice = get_practice_record(practice_name)
+    if practice:
+        associated_users_query= (UserSql.select()
+            .join(UserToPractice, on=UserToPractice.user)
+            .where(UserToPractice.practice == practice)
+            .order_by(UserSql.username))
+
+        associated_usernames = []
+        if associated_users_query.exists():
+            for user in associated_users_query:
+                associated_usernames.append(user.username)
+        else:
+            print(f'No users are associated with practice {practice_name}')
+            associated_usernames.append('No users are associated with this practice')
+
+        return associated_usernames
+    else:
+        print(f'Practice {practice_name} does not exist in SQL DB')
+        return None
+
+def change_user_association_with_practice(username_to_modify: str, practice_name: str, association_type: str):
+    user = get_user_record(username_to_modify)
+    practice = get_practice_record(practice_name)
+    if user and practice:
+        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
+        if user_to_practice_association.exists():
+            if association_type not in ['owner', 'member']:
+                print(f'Association type {association_type} is invalid')
+                return f'Association type {association_type} is invalid'
+            
+            user_to_practice_association_row = user_to_practice_association.get()
+            user_to_practice_association_row.association_type = association_type
+            user_to_practice_association_row.save()
+            print(f'User {username_to_modify} is now a {association_type} of practice {practice_name}')
+            return f'User {username_to_modify} is now a {association_type} of practice {practice_name}'
+        else:
+            print(f'User {username_to_modify} is not associated with practice {practice_name}')
+            return f'User {username_to_modify} is not associated with practice {practice_name}'
+    else:
+        print(f'User {username_to_modify} or practice {practice_name} does not exist in SQL DB')
+        return f'User {username_to_modify} or practice {practice_name} does not exist!'
+    
+def create_practice_join_codes(practice_name: str):
+    practice = get_practice_record(practice_name)
+    if practice:
+        join_code_1 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        join_code_2 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        join_code_3 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        join_code_4 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        join_code_5 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+
+        new_practice_join_codes = PracticeJoinCodes(
+            practice=practice,
+            join_code_1=join_code_1,
+            join_code_2=join_code_2,
+            join_code_3=join_code_3,
+            join_code_4=join_code_4,
+            join_code_5=join_code_5,
+            created=datetime.now(),
+        )
+
+        if new_practice_join_codes.save() == 1:
+            print(f'Join codes for practice {practice_name} have been saved to SQL DB')
+            return True
+        else:
+            print(f'Join codes for practice {practice_name} have not been saved to SQL DB')
+            return False
+    else:
+        print(f'Practice {practice_name} does not exist in SQL DB')
+        return False
+    
+def get_practice_join_codes(practice_name: str):
+    practice = get_practice_record(practice_name)
+    if practice:
+        join_codes_query = PracticeJoinCodes.select().where(PracticeJoinCodes.practice == practice)
+        if join_codes_query.exists():
+            for join_codes in join_codes_query:
+                join_codes_dict = {
+                    'join_code_1': join_codes.join_code_1,
+                    'join_code_2': join_codes.join_code_2,
+                    'join_code_3': join_codes.join_code_3,
+                    'join_code_4': join_codes.join_code_4,
+                    'join_code_5': join_codes.join_code_5,
+                }
+                return join_codes_dict
+        else:
+            print(f'No join codes for practice {practice_name} in SQL DB')
+            return None
+    else:
+        print(f'Practice {practice_name} does not exist in SQL DB')
+        return None
+    
+def validate_join_code(join_code: str, practice_name: str):
+    practice = get_practice_record(practice_name)
+    if practice:
+        join_codes_query = PracticeJoinCodes.select().where(PracticeJoinCodes.practice == practice)
+        join_code_row = join_codes_query.get()
+        print(join_code_row)
+        
+        # if join_code_row.exists():
+        join_codes = []
+        join_codes.append(join_code_row.join_code_1)
+        join_codes.append(join_code_row.join_code_2)
+        join_codes.append(join_code_row.join_code_3)
+        join_codes.append(join_code_row.join_code_4)
+        join_codes.append(join_code_row.join_code_5)
+
+        if join_code in join_codes:
+            print(f'Join code {join_code} is valid')
+            return True
+        else:
+            print(f'Join code: {join_code} is invalid for practice: {practice_name}.')
+            return False
+    else:
+        print(f'Practice {practice_name} does not exist in SQL DB')
+        return False
+    
+def get_practice_user_type(username: str, practice_name: str):
+    user = get_user_record(username)
+    practice = get_practice_record(practice_name)
+    if user and practice:
+        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
+        if user_to_practice_association.exists():
+            user_to_practice_association_row = user_to_practice_association.get()
+            return user_to_practice_association_row.association_type
+        else:
+            print(f'User {username} is not associated with practice {practice_name}')
+            return None
+    else:
+        print(f'User {username} or practice {practice_name} does not exist in SQL DB')
+        return None
+
+def create_user_isi_data(username: str, date: date, score: int):
+
+
+    # TODO refactor this to update if date exists or create
+    # Works with Postgresql and SQLite (which supports ON CONFLICT ... UPDATE).
+    # result = (Emp
+    #         .insert(first='foo', last='bar', empno='125')
+    #         .on_conflict(
+    #             conflict_target=(Emp.empno,),
+    #             preserve=(Emp.first, Emp.last),
+    #             update={Emp.empno: '125.1'})
+    #         .execute())
+
+    user = get_user_record(username)
+    if user:
+        new_isi_data = IsiData(
+            user=user,
+            date=date,
+            score=score,
+        )
+
+        if new_isi_data.save() == 1:
+            print(f'ISI data for user {username} has been saved to SQL DB')
+            return True
+        else:
+            print(f'ISI data for user {username} has not been saved to SQL DB')
+            return False
+    else:
+        print(f'User {username} does not exist in SQL DB')
+        return False
