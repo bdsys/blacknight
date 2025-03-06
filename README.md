@@ -19,3 +19,7 @@ http://localhost:8000/redoc
 
 ## Start FastAPI locally
 fastapi dev app.py
+
+### Kind, K8S and Istio links
+https://kind.sigs.k8s.io/docs/user/quick-start/
+https://istio.io/latest/docs/setup/platform-setup/kind/
