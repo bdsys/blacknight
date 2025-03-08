@@ -50,7 +50,8 @@ class UpdatePractice(BaseModel):
 
 class CreateIsiData(BaseModel):
     username: str
-    date: date
+    start_date: date
+    end_date: date
     score: int
 
 # SQL models -- peewee
@@ -138,7 +139,8 @@ class SleepData(Model):
 class IsiData(Model):
     id = AutoField()
     user = ForeignKeyField(UserSql, backref='isi_data')
-    date = DateField()
+    date_start = DateField()
+    date_end = DateField()
     score = IntegerField()
 
     class Meta:

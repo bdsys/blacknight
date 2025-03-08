@@ -251,7 +251,7 @@ async def read_users_me(
     # return current_user # too much exposed
     return json_response_body
 
-@app.post("/users/me/password")
+@app.put("/users/me/password")
 async def update_users_me_password(
     current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, password: UpdatePassword,
 ):
@@ -287,7 +287,7 @@ async def update_users_me_password(
 
     return current_user
 
-@app.post("/users/me/type")
+@app.put("/users/me/type")
 async def update_users_me_type(
     current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, user_type: str, verification: bool = False,
 ):
@@ -340,7 +340,7 @@ async def update_users_me_type(
     # return current_user # too much exposed
     return json_response_body
 
-@app.post("/users/me")
+@app.put("/users/me")
 async def update_users_me(
     current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, user: UpdateUser,
 ):
@@ -416,22 +416,23 @@ async def read_practice(current_user: Annotated[UserSql, Depends(get_current_act
 
     practice_value = get_practice_record(practice_name)
 
-    associated_users = get_associated_users_from_practice(practice_name)
-
-    username_and_practice_type_list = []
-    for username in associated_users:
-        user_type = get_practice_user_type(username, practice_name)
-        print(f'User type for {username} is {user_type}')
-        username_and_practice_type_list.append({
-            'username': username,
-            'user_type': user_type,
-        })
-
-
-    # TODO only return this is the user is associated as an owner
-    practice_join_codes = get_practice_join_codes(practice_name)
-        
     if practice_value:
+
+        associated_users = get_associated_users_from_practice(practice_name)
+
+        username_and_practice_type_list = []
+        for username in associated_users:
+            user_type = get_practice_user_type(username, practice_name)
+            print(f'User type for {username} is {user_type}')
+            username_and_practice_type_list.append({
+                'username': username,
+                'user_type': user_type,
+            })
+
+
+        # TODO only return this is the user is associated as an owner
+        practice_join_codes = get_practice_join_codes(practice_name)
+        
         json_response_body = {
             'practice_name': practice_value.practice_name,
             'practice_address': practice_value.practice_address,
@@ -505,7 +506,7 @@ async def create_practice(current_user: Annotated[UserSql, Depends(get_current_a
             detail="An error has occured during practice join codes creation. Please try again soon, sorry about that.",
         )
 
-    add_user_to_practice(current_user.username, get_practice_data.practice_name)
+    add_user_to_practice(current_user.username, get_practice_data.practice_name, association='owner')
     
     return 'OK'
 
@@ -520,7 +521,37 @@ async def delete_practice(current_user: Annotated[UserSql, Depends(get_current_a
             detail="Token has been invalidated",
         )
 
-    if check_user_association_with_practice(current_user.username, get_practice_data.practice_name):
+    # Check if the user is associated to the practice and is an owner
+    # if check_user_association_with_practice(current_user.username, get_practice_data.practice_name):
+    print(f'Checking if the user is an owner of the practice')
+    if check_user_owner_of_practice(current_user.username, get_practice_data.practice_name):
+
+        # Check if there is more than one owenr associated to the practice
+        print(f'Checking if there is more than one owner associated with the practice')
+        associated_users = get_associated_users_from_practice(get_practice_data.practice_name)
+
+        username_and_practice_type_list = []
+        for username in associated_users:
+            user_type = get_practice_user_type(username, get_practice_data.practice_name)
+            print(f'User type for {username} is {user_type}')
+            username_and_practice_type_list.append({
+                'username': username,
+                'user_type': user_type,
+            })
+            
+        owner_count = 0
+        for user in username_and_practice_type_list:
+            if user['user_type'] == 'owner':
+                owner_count += 1
+
+        if owner_count > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Practice cannot be deleted as there is more than one owner associated with it",
+            )
+
+        # Check if the user is a practitioner after validating the user is an owner and that there are no more owners associated with the practice
+        print(f'Checking if the user is a practitioner')
         user_type_check = get_user_record(current_user.username).user_type
         if user_type_check == 'practitioner':
             if verification:
@@ -546,10 +577,10 @@ async def delete_practice(current_user: Annotated[UserSql, Depends(get_current_a
     else:
         raise HTTPException(
             status_code=401,
-            detail="User is not associated with this practice",
+            detail="User is not an owner of this practice",
         )
 
-@app.post('/practice/update')
+@app.put('/practice/update')
 async def update_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, existing_practice_name: str, practice_data: UpdatePractice
 ):
     print(f'Entering POST /practice/update')
@@ -608,7 +639,7 @@ async def update_practice(current_user: Annotated[UserSql, Depends(get_current_a
             detail="User is not associated with this practice",
         )
 
-@app.post('/practice/associate')
+@app.put('/practice/associate')
 async def associate_user_with_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str, username_to_add: str, join_code: str
 ):
     print(f'Entering POST /practice/associate')
@@ -691,7 +722,7 @@ async def disassociate_user_with_practice(current_user: Annotated[UserSql, Depen
             detail="User is not associated with this practice",
         )
 
-@app.post('/practice/associate/change')
+@app.put('/practice/associate/change')
 async def change_association_user_with_practice(current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, practice_name: str, username_to_modify: str, verficiation: bool = False, association_type: str = 'member'
 ):
     print(f'Entering POST /practice/associate/change')
@@ -741,7 +772,12 @@ async def create_user_isi_data_post(
     print(f'User: {current_user}')
     print(f'IsiData: {isi_data}')
 
-    if create_user_isi_data(current_user.username, isi_data.date, isi_data.score):
+    if create_user_isi_data(
+        username=current_user.username,
+        date_start=isi_data.start_date, 
+        date_end=isi_data.end_date, 
+        score=isi_data.score,
+    ):
         print(f'User {current_user.username} ISI data has been created!')
     else:
         print(f'User {current_user.username} ISI data creation failed!')

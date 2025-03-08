@@ -514,7 +514,7 @@ def logout_user(jwt: str):
         print(f'User has not been logged out')
         return False
     
-def add_user_to_practice(username: str, practice_name: str):
+def add_user_to_practice(username: str, practice_name: str, association: str='member'):
     user = get_user_record(username)
     practice = get_practice_record(practice_name)
     if user and practice:
@@ -523,6 +523,7 @@ def add_user_to_practice(username: str, practice_name: str):
             user=user,
             practice=practice,
             created = date.today(),
+            association_type=association
         )
 
         if user_to_practice_association.save() == 1:
@@ -572,6 +573,24 @@ def check_user_association_with_practice(username: str, practice_name: str):
             return False
         else:
             print(f'No users are associated with practice {practice_name}')
+            return False
+        
+def check_user_owner_of_practice(username: str, practice_name: str):
+    user_record = get_user_record(username)
+    practice_record = get_practice_record(practice_name)
+
+    if practice_record and user_record:
+        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user_record and UserToPractice.practice == practice_record)
+        if user_to_practice_association.exists():
+            user_to_practice_association_row = user_to_practice_association.get()
+            if user_to_practice_association_row.association_type == 'owner':
+                print(f'User {username} is an owner of practice {practice_name}')
+                return True
+            else:
+                print(f'User {username} is not an owner of practice {practice_name}')
+                return False
+        else:
+            print(f'User {username} is not associated with practice {practice_name}')
             return False
 
 def get_associated_users_from_practice(practice_name: str):
@@ -707,7 +726,7 @@ def get_practice_user_type(username: str, practice_name: str):
         print(f'User {username} or practice {practice_name} does not exist in SQL DB')
         return None
 
-def create_user_isi_data(username: str, date: date, score: int):
+def create_user_isi_data(username: str, date_start: date, date_end: date, score: int):
 
 
     # TODO refactor this to update if date exists or create
@@ -724,7 +743,8 @@ def create_user_isi_data(username: str, date: date, score: int):
     if user:
         new_isi_data = IsiData(
             user=user,
-            date=date,
+            date_start=date_start,
+            date_end=date_end,
             score=score,
         )
 
