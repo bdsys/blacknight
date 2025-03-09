@@ -49,7 +49,6 @@ class UpdatePractice(BaseModel):
     practice_languages: str | None = None
 
 class CreateIsiData(BaseModel):
-    username: str
     start_date: date
     end_date: date
     score: int
@@ -67,7 +66,7 @@ class UserSql(Model):
     last_updated = DateField(default=date.today)
     disabled = BooleanField(default=True)
     hashed_password = CharField()
-    user_type = CharField(choices=[('user', 'User'), ('admin', 'Admin')], default='user')
+    user_type = CharField(choices=[('user'), ('practitioner')], default='user')
 
     class Meta:
         database = db
@@ -97,11 +96,16 @@ class Practice(Model):
 class PracticeJoinCodes(Model):
     id = AutoField()
     practice = ForeignKeyField(Practice, backref='join_codes')
-    join_code_1 = CharField(unique=True)
-    join_code_2 = CharField(unique=True)
-    join_code_3 = CharField(unique=True)
-    join_code_4 = CharField(unique=True)
-    join_code_5 = CharField(unique=True)
+    # join_code_1 = CharField(unique=True)
+    # join_code_2 = CharField(unique=True)
+    # join_code_3 = CharField(unique=True)
+    # join_code_4 = CharField(unique=True)
+    # join_code_5 = CharField(unique=True)
+    join_code_1 = IntegerField()
+    join_code_2 = IntegerField()
+    join_code_3 = IntegerField()
+    join_code_4 = IntegerField()
+    join_code_5 = IntegerField()
     created = DateTimeField()
 
     class Meta:
@@ -112,7 +116,7 @@ class UserToPractice(Model):
     user = ForeignKeyField(UserSql)
     practice = ForeignKeyField(Practice)
     created = DateTimeField()
-    association_type = CharField(choices=[('owner', 'Owner'), ('member', 'Member')], default='member')
+    association_type = CharField(choices=[('owner'), ('member'), ('provider')], default='member')
 
     class Meta:
         # CompositeKey('user', 'practice')
@@ -142,6 +146,9 @@ class IsiData(Model):
     date_start = DateField()
     date_end = DateField()
     score = IntegerField()
+    last_updated_by = ForeignKeyField(UserSql, backref='isi_data_updated')
+    last_updated = DateTimeField()
+    associated_practice = ForeignKeyField(Practice, backref='isi_data', null=True)
 
     class Meta:
         database = db

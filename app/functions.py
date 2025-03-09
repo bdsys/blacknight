@@ -271,12 +271,29 @@ def validate_user_type(user_type: str):
         else:
             user_type_validation_error.append('User type must be either "user" or "practitioner"')
             print(f'User type validation error for string: {user_type}')
-            print('User type must be either "user" or "admin')
+            print('User type must be either "user" or "practitioner')
         if user_type_validation_error:
             print(user_type_validation_error)
         else:
             print(f'No user type validation errors for string: {user_type}')
         return user_type_validation_error    
+    
+def validate_practice_association_type(association_type: str):
+    print(f'Staring association type validation for string: {association_type}')
+    association_type_validation_error: list[str] = []
+    if association_type:
+        if association_type in ['owner', 'member', 'provider']:
+            pass
+            print(f'Association type is valid')
+        else:
+            association_type_validation_error.append('Association type must be either "owner", "member" or "provider"')
+            print(f'Association type validation error for string: {association_type}')
+            print('Association type must be either "owner", "member" or "provider')
+        if association_type_validation_error:
+            print(association_type_validation_error)
+        else:
+            print(f'No association type validation errors for string: {association_type}')
+        return association_type_validation_error
 
 def validate_password(password: str):
     print(f'Staring password validation for string: {password}')
@@ -340,13 +357,18 @@ def validate_password(password: str):
     
 def create_user(username: str, email: str, password: str, user_type: str):
     hashed_password = get_password_hash(password)
+    print(f'debug -- creating user with data:')
+    print(f'username: {username}')
+    print(f'email: {email}')
+    print(f'hashed_password: {hashed_password}')
+    print(f'user_type: {user_type}')
     new_user = UserSql(
         username=username,
         email=email,
         joined=date.today(),
         disabled=False,
         hashed_password=hashed_password,
-        type=user_type,
+        user_type=user_type,
     )
     if new_user.save() == 1:
         print(f'User {username} has been saved to SQL DB')
@@ -498,12 +520,12 @@ def invalidate_jwt(jwt: str):
 def check_jwt_blacklist(jwt: str):
     jwt_query = BlackListedJwt.select().where(BlackListedJwt.jwt == jwt)
     if jwt_query.exists():
-        print(f'JWT {jwt} is in SQL DB')
+        print(f'JWT {jwt} is in blacklist SQL DB')
         for jwt in jwt_query:
             print(f'JWT: {jwt}')
         return True
     else:
-        print(f'JWT {jwt} is not in SQL DB')
+        print(f'JWT {jwt} is not in blacklist SQL DB')
         return False
 
 def logout_user(jwt: str):
@@ -518,7 +540,11 @@ def add_user_to_practice(username: str, practice_name: str, association: str='me
     user = get_user_record(username)
     practice = get_practice_record(practice_name)
     if user and practice:
-
+        
+        print(f'Adding user to UserToPractice table with data:')
+        print(f'User: {user}')
+        print(f'Practice: {practice}')
+        print(f'association_type: {association}')
         user_to_practice_association = UserToPractice(
             user=user,
             practice=practice,
@@ -528,19 +554,19 @@ def add_user_to_practice(username: str, practice_name: str, association: str='me
 
         if user_to_practice_association.save() == 1:
             print(f'User {username} has been added to practice {practice_name}')
-            return True
+            return None
         else:
             print(f'User {username} has not been added to practice {practice_name}')
-            return False
+            return f'User {username} has not been added to practice {practice_name}'
     else:
         print(f'User {username} or practice {practice_name} does not exist in SQL DB')
-        return False
+        return f'User {username} or practice {practice_name} does not exist in SQL DB'
     
 def disassociate_user_from_practice(username: str, practice_name: str):
     user = get_user_record(username)
     practice = get_practice_record(practice_name)
     if user and practice:
-        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
+        user_to_practice_association = UserToPractice.select().where((UserToPractice.user == user) & (UserToPractice.practice == practice))
         if user_to_practice_association.exists():
             user_to_practice_association.get().delete_instance()
             print(f'User {username} has been removed from practice {practice_name}')
@@ -560,7 +586,7 @@ def check_user_association_with_practice(username: str, practice_name: str):
     if practice_record and user_record:
         associated_users_query= (UserSql.select()
             .join(UserToPractice, on=UserToPractice.user)
-            .where(UserToPractice.practice == practice_record and UserToPractice.user == user_record)
+            .where((UserToPractice.practice == practice_record) & (UserToPractice.user == user_record))
             .order_by(UserSql.username))
 
         if associated_users_query.exists():
@@ -580,7 +606,7 @@ def check_user_owner_of_practice(username: str, practice_name: str):
     practice_record = get_practice_record(practice_name)
 
     if practice_record and user_record:
-        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user_record and UserToPractice.practice == practice_record)
+        user_to_practice_association = UserToPractice.select().where((UserToPractice.user == user_record) & (UserToPractice.practice == practice_record))
         if user_to_practice_association.exists():
             user_to_practice_association_row = user_to_practice_association.get()
             if user_to_practice_association_row.association_type == 'owner':
@@ -618,12 +644,8 @@ def change_user_association_with_practice(username_to_modify: str, practice_name
     user = get_user_record(username_to_modify)
     practice = get_practice_record(practice_name)
     if user and practice:
-        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
-        if user_to_practice_association.exists():
-            if association_type not in ['owner', 'member']:
-                print(f'Association type {association_type} is invalid')
-                return f'Association type {association_type} is invalid'
-            
+        user_to_practice_association = UserToPractice.select().where((UserToPractice.user == user) & (UserToPractice.practice == practice))
+        if user_to_practice_association.exists():            
             user_to_practice_association_row = user_to_practice_association.get()
             user_to_practice_association_row.association_type = association_type
             user_to_practice_association_row.save()
@@ -635,23 +657,36 @@ def change_user_association_with_practice(username_to_modify: str, practice_name
     else:
         print(f'User {username_to_modify} or practice {practice_name} does not exist in SQL DB')
         return f'User {username_to_modify} or practice {practice_name} does not exist!'
-    
+
+def generate_unique_join_code(join_codes_constraint: list[str], min: int, max: int):
+    # Example for generating a random string of 12 uppercase characters + digits
+    # join_code_1 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+
+    # Generated 5 digits for join codes
+    join_code = random.randint(min,max)
+    # print(f'Generated join code: {join_code}')
+    while join_code in join_codes_constraint:
+        # print(f'Generated join code: {join_code} is not unique')
+        join_code = random.randint(min,max)
+    return join_code
+
 def create_practice_join_codes(practice_name: str):
     practice = get_practice_record(practice_name)
     if practice:
-        join_code_1 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-        join_code_2 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-        join_code_3 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-        join_code_4 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-        join_code_5 = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        
+        generated_codes = []
+        for i in range(5):
+            generated_codes.append(generate_unique_join_code(generated_codes, 10000, 99999))
+
+        print(f'Generated join codes: {generated_codes}')
 
         new_practice_join_codes = PracticeJoinCodes(
             practice=practice,
-            join_code_1=join_code_1,
-            join_code_2=join_code_2,
-            join_code_3=join_code_3,
-            join_code_4=join_code_4,
-            join_code_5=join_code_5,
+            join_code_1=generated_codes[0],
+            join_code_2=generated_codes[1],
+            join_code_3=generated_codes[2],
+            join_code_4=generated_codes[3],
+            join_code_5=generated_codes[4],
             created=datetime.now(),
         )
 
@@ -686,21 +721,22 @@ def get_practice_join_codes(practice_name: str):
         print(f'Practice {practice_name} does not exist in SQL DB')
         return None
     
-def validate_join_code(join_code: str, practice_name: str):
+def validate_join_code(join_code: int, practice_name: str):
     practice = get_practice_record(practice_name)
     if practice:
         join_codes_query = PracticeJoinCodes.select().where(PracticeJoinCodes.practice == practice)
         join_code_row = join_codes_query.get()
-        print(join_code_row)
+        # print(join_code_row)
         
-        # if join_code_row.exists():
-        join_codes = []
-        join_codes.append(join_code_row.join_code_1)
-        join_codes.append(join_code_row.join_code_2)
-        join_codes.append(join_code_row.join_code_3)
-        join_codes.append(join_code_row.join_code_4)
-        join_codes.append(join_code_row.join_code_5)
+        join_codes = [
+            join_code_row.join_code_1,
+            join_code_row.join_code_2,
+            join_code_row.join_code_3,
+            join_code_row.join_code_4,
+            join_code_row.join_code_5,
+        ]
 
+        # print(f'Checking if {join_code} is in {join_codes}')
         if join_code in join_codes:
             print(f'Join code {join_code} is valid')
             return True
@@ -711,11 +747,12 @@ def validate_join_code(join_code: str, practice_name: str):
         print(f'Practice {practice_name} does not exist in SQL DB')
         return False
     
-def get_practice_user_type(username: str, practice_name: str):
+def get_user_to_practice_association_type(username: str, practice_name: str):
     user = get_user_record(username)
     practice = get_practice_record(practice_name)
+    # print(f'Getting user type for user {user} and practice {practice}')
     if user and practice:
-        user_to_practice_association = UserToPractice.select().where(UserToPractice.user == user and UserToPractice.practice == practice)
+        user_to_practice_association = UserToPractice.select().where((UserToPractice.user == user) & (UserToPractice.practice == practice))
         if user_to_practice_association.exists():
             user_to_practice_association_row = user_to_practice_association.get()
             return user_to_practice_association_row.association_type
@@ -746,6 +783,9 @@ def create_user_isi_data(username: str, date_start: date, date_end: date, score:
             date_start=date_start,
             date_end=date_end,
             score=score,
+            last_updated_by=user,
+            last_updated=datetime.now(),
+            associated_practice=None
         )
 
         if new_isi_data.save() == 1:
