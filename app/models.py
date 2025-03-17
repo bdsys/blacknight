@@ -50,8 +50,27 @@ class UpdatePractice(BaseModel):
 
 class CreateIsiData(BaseModel):
     start_date: date
-    end_date: date
+    # end_date: date
     score: int
+
+class GetIsiData(BaseModel):
+    start_date: date
+
+class CreateSleepDiaryData(BaseModel):
+    date: date
+    hours: float
+    notes: str
+    bedtime_start: date
+    bedtime_end: date
+    minutes_when_out_of_bed_after_waking: int
+    time_to_fall_asleep: date
+    number_of_awakenings: int
+    time_awake_during_night: date
+    final_awakening_time: date
+    wake_earlier_than_desried: bool
+    minutes_awake_earlier_than_desired: int
+    sleep_rating: Literal['very_poor', 'poor', 'fair', 'good', 'very_good']
+    notes = TextField()
 
 # SQL models -- peewee
 db = SqliteDatabase('database.db')
@@ -143,8 +162,8 @@ class SleepData(Model):
 class IsiData(Model):
     id = AutoField()
     user = ForeignKeyField(UserSql, backref='isi_data')
-    date_start = DateField()
-    date_end = DateField()
+    date_start = DateField(unique=True)
+    # date_end = DateField() # Removing for now as it seems difficult to use
     score = IntegerField()
     last_updated_by = ForeignKeyField(UserSql, backref='isi_data_updated')
     last_updated = DateTimeField()

@@ -763,36 +763,75 @@ def get_user_to_practice_association_type(username: str, practice_name: str):
         print(f'User {username} or practice {practice_name} does not exist in SQL DB')
         return None
 
-def create_user_isi_data(username: str, date_start: date, date_end: date, score: int):
-
-
-    # TODO refactor this to update if date exists or create
-    # Works with Postgresql and SQLite (which supports ON CONFLICT ... UPDATE).
-    # result = (Emp
-    #         .insert(first='foo', last='bar', empno='125')
-    #         .on_conflict(
-    #             conflict_target=(Emp.empno,),
-    #             preserve=(Emp.first, Emp.last),
-    #             update={Emp.empno: '125.1'})
-    #         .execute())
-
+# Can be used to create and update based on date_start
+def create_user_isi_data(username: str, date_start: date, score: int):
     user = get_user_record(username)
     if user:
-        new_isi_data = IsiData(
-            user=user,
-            date_start=date_start,
-            date_end=date_end,
-            score=score,
-            last_updated_by=user,
-            last_updated=datetime.now(),
-            associated_practice=None
-        )
-
-        if new_isi_data.save() == 1:
-            print(f'ISI data for user {username} has been saved to SQL DB')
+        try:
+            if user:
+                row_number = IsiData.insert(
+                    user=user,
+                    date_start=date_start,
+                    # date_end=date_end,
+                    score=score,
+                    last_updated_by=user,
+                    last_updated=datetime.now(),
+                    # associated_practice=None,
+                ).on_conflict(
+                    conflict_target=(IsiData.date_start,),
+                    preserve=(IsiData.date_start, IsiData.user),
+                    update={IsiData.score: score, IsiData.last_updated_by: user, 
+                            IsiData.last_updated: datetime.now(),}
+                ).execute()
+        
+            print(f'ISI data has been saved to SQL DB (row number: {row_number})')
             return True
-        else:
-            print(f'ISI data for user {username} has not been saved to SQL DB')
+        
+        except Exception as e:
+            print(f'ISI data has not been saved to SQL DB')
+            print(e)
+            return False
+    else:
+        print(f'User {username} does not exist in SQL DB')
+        return False
+
+def delete_user_isi_data(username: str, date_start):
+    user = get_user_record(username)
+    if user:
+        try:
+            row_number = IsiData.delete().where((IsiData.user == user) & (IsiData.date_start == date_start)).execute()
+            print(f'ISI data has been deleted from SQL DB (row number: {row_number})')
+            if row_number > 0:
+                return f'ISI data deleted for {username} on date: {date_start}'
+            elif row_number == 0:
+                return f'No ISI data has been found for {username} on date: {date_start}'
+        except Exception as e:
+            print(f'ISI data has not been deleted from SQL DB')
+            print(e)
+            return False
+    else:
+        print(f'User {username} does not exist in SQL DB')
+        return False
+
+# TODO finish this
+def get_user_isi_data(username: str, date_start: date):
+    user = get_user_record(username)
+    if user:
+        try:
+            isi_data_query = IsiData.select().where((IsiData.user == user) & (IsiData.date_start == date_start))
+            if isi_data_query.exists():
+                for isi_data in isi_data_query:
+                    return {
+                        'username': isi_data.user.username,
+                        'date_start': isi_data.date_start,
+                        'score': isi_data.score,
+                    }
+            else:
+                print(f'No ISI data found for {username} on date: {date_start}')
+                return None
+        except Exception as e:
+            print(f'ISI data has not been retrieved from SQL DB')
+            print(e)
             return False
     else:
         print(f'User {username} does not exist in SQL DB')

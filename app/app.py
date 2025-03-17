@@ -816,7 +816,7 @@ async def change_association_user_with_practice(current_user: Annotated[UserSql,
 # User sleep data screens
 @app.post("/users/me/isidata")
 async def create_user_isi_data_post(
-    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, isi_data: CreateIsiData
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, isi_data: CreateIsiData, future_dated: bool = False,
 ):
     bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
     print(f'Bearer token from request header: {bearer_token_from_request_header}')
@@ -830,10 +830,26 @@ async def create_user_isi_data_post(
     print(f'User: {current_user}')
     print(f'IsiData: {isi_data}')
 
+    # Allow for future dated with a validation step
+    if isi_data.start_date > datetime.now().date():
+        if not future_dated:
+            raise HTTPException(
+                status_code=400,
+                detail="Start date cannot be in the future unless future_dated is set to true. Consider this a verification for future dated data.",
+            )
+    # Check if validation step is being used properly
+    elif isi_data.start_date <= datetime.now().date():
+        if future_dated:
+            raise HTTPException(
+                status_code=400,
+                detail="Start date cannot be in the past when future_dated is set to true. future_dated should only be used to verify creation or updating of future dated data.",
+            )
+
+
     if create_user_isi_data(
         username=current_user.username,
         date_start=isi_data.start_date, 
-        date_end=isi_data.end_date, 
+        # date_end=isi_data.end_date, 
         score=isi_data.score,
     ):
         print(f'User {current_user.username} ISI data has been created!')
@@ -845,6 +861,55 @@ async def create_user_isi_data_post(
         )
 
     return 'OK'
+
+@app.delete("/users/me/isidata")
+async def delete_user_isi_data_delete(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, isi_data: GetIsiData, verification: bool = False,
+):
+    
+    bearer_token_from_request_header = request.headers.get('Authorization').split('Bearer ')[1]
+    print(f'Bearer token from request header: {bearer_token_from_request_header}')
+    if check_jwt_blacklist(bearer_token_from_request_header):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated",
+        )
+
+    print(f'Entering DELETE /users/me/isidata')
+    print(f'User: {current_user}')
+    print(f'IsiData: {isi_data}')
+
+    delte_isi_data_result = delete_user_isi_data(
+        username=current_user.username,
+        date_start=isi_data.start_date,
+    )
+    return delte_isi_data_result
+
+@app.get("/users/me/isidata")
+async def read_user_isi_data(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, start_date: date = datetime.now().date()
+):
+    print(f'Entering GET /users/me/isidata')
+    print(f'User: {current_user}')
+    print(f'start_date: {start_date}')
+
+    isi_data_value = get_user_isi_data(
+        username=current_user.username,
+        date_start=start_date,
+    )
+
+    if isi_data_value:
+        json_response_body = {
+            'username': isi_data_value['username'],
+            'date_start': isi_data_value['date_start'],
+            'score': isi_data_value['score'],
+        }
+        return json_response_body
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="ISI data does not exist",
+        )
 
 # User sleep data screens for providers
 # @app.post("/providers/patient/isidata")
