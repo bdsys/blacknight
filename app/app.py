@@ -910,6 +910,63 @@ async def read_user_isi_data(
             status_code=400,
             detail="ISI data does not exist",
         )
+    
+@app.post("/users/me/sleepdiary")
+async def create_user_sleep_diary_post(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, sleep_diary_data: CreateSleepDiaryData
+):
+    print(f'Entering POST /users/me/sleepdiary')
+    print(f'User: {current_user}')
+    print(f'SleepDiary: {sleep_diary_data}')
+
+    if create_user_sleep_diary_data(username=current_user.username, CreateDataModel=sleep_diary_data):
+        print(f'User {current_user.username} Sleep Diary data has been created!')
+    else:
+        print(f'User {current_user.username} Sleep Diary data creation failed!')
+        raise HTTPException(
+            status_code=500,
+            detail="An error has occured during Sleep Diary data creation. Please try again soon, sorry about that.",
+        )
+
+    return 'OK'
+
+@app.get("/users/me/sleepdiary")
+async def read_user_sleep_diary_data(
+    current_user: Annotated[UserSql, Depends(get_current_active_user)], request: Request, entry_date: date = datetime.now().date()
+):
+    print(f'Entering GET /users/me/sleepdiary')
+    print(f'User: {current_user}')
+    print(f'entry_date: {entry_date}')
+
+    sleep_diary_data_value = get_user_sleep_diary_data(
+        username=current_user.username,
+        entry_date=entry_date,
+    )
+
+    if sleep_diary_data_value:
+        json_response_body = {
+            'username': sleep_diary_data_value['username'],
+            'entry_date': sleep_diary_data_value['entry_date'],
+            'hours_slept': sleep_diary_data_value['hours_slept'],
+            'bedtime_start': sleep_diary_data_value['bedtime_start'],
+            'bedtime_end': sleep_diary_data_value['bedtime_end'],
+            'notes': sleep_diary_data_value['notes'],
+            'minutes_when_out_of_bed_after_waking': sleep_diary_data_value['minutes_when_out_of_bed_after_waking'],
+            'time_to_fall_asleep': sleep_diary_data_value['time_to_fall_asleep'],
+            'number_of_awakenings': sleep_diary_data_value['number_of_awakenings'],
+            'time_awake_during_night': sleep_diary_data_value['time_awake_during_night'],
+            'final_awakening_time': sleep_diary_data_value['final_awakening_time'],
+            'wake_earlier_than_desried': sleep_diary_data_value['wake_earlier_than_desried'],
+            'minutes_awake_earlier_than_desired': sleep_diary_data_value['minutes_awake_earlier_than_desired'],
+            'sleep_rating': sleep_diary_data_value['sleep_rating'],
+
+        }
+        return json_response_body
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Sleep Diary data does not exist",
+        )
 
 # User sleep data screens for providers
 # @app.post("/providers/patient/isidata")

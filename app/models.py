@@ -57,11 +57,11 @@ class GetIsiData(BaseModel):
     start_date: date
 
 class CreateSleepDiaryData(BaseModel):
-    date: date
-    hours: float
-    notes: str
+    entry_date: date
+    hours_slept: float
     bedtime_start: date
     bedtime_end: date
+    notes: str
     minutes_when_out_of_bed_after_waking: int
     time_to_fall_asleep: date
     number_of_awakenings: int
@@ -162,12 +162,35 @@ class SleepData(Model):
 class IsiData(Model):
     id = AutoField()
     user = ForeignKeyField(UserSql, backref='isi_data')
-    date_start = DateField(unique=True)
+    date_start = DateField()
     # date_end = DateField() # Removing for now as it seems difficult to use
     score = IntegerField()
     last_updated_by = ForeignKeyField(UserSql, backref='isi_data_updated')
     last_updated = DateTimeField()
     associated_practice = ForeignKeyField(Practice, backref='isi_data', null=True)
+
+    class Meta:
+        database = db
+
+class SleepDiaryData(Model):
+    id = AutoField()
+    user = ForeignKeyField(UserSql, backref='sleep_diary_data')
+    last_updated_by = ForeignKeyField(UserSql, backref='isi_data_updated')
+    last_updated = DateTimeField()
+    associated_practice = ForeignKeyField(Practice, backref='isi_data', null=True)
+    entry_date = DateTimeField()
+    hours_slept = FloatField()
+    bedtime_start = DateTimeField()
+    bedtime_end = DateTimeField()
+    minutes_when_out_of_bed_after_waking = IntegerField()
+    time_to_fall_asleep = DateTimeField()
+    number_of_awakenings = IntegerField()
+    time_awake_during_night = DateTimeField()
+    final_awakening_time = DateTimeField()
+    wake_earlier_than_desried = BooleanField()
+    minutes_awake_earlier_than_desired = IntegerField()
+    sleep_rating = CharField(choices=[('very_poor'), ('poor'), ('fair'), ('good'), ('very_good')])
+    notes = TextField()
 
     class Meta:
         database = db
@@ -182,7 +205,8 @@ def create_tables():
             PracticeJoinCodes,
             UserToPractice,
             SleepData,
-            IsiData
+            IsiData,
+            SleepDiaryData,
         ])
 
 db.connect()

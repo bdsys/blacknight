@@ -768,22 +768,20 @@ def create_user_isi_data(username: str, date_start: date, score: int):
     user = get_user_record(username)
     if user:
         try:
-            if user:
-                row_number = IsiData.insert(
-                    user=user,
-                    date_start=date_start,
-                    # date_end=date_end,
+            if get_user_isi_data(username, date_start):
+                row_number = IsiData.update(
                     score=score,
                     last_updated_by=user,
                     last_updated=datetime.now(),
-                    # associated_practice=None,
-                ).on_conflict(
-                    conflict_target=(IsiData.date_start,),
-                    preserve=(IsiData.date_start, IsiData.user),
-                    update={IsiData.score: score, IsiData.last_updated_by: user, 
-                            IsiData.last_updated: datetime.now(),}
+                ).where((IsiData.user == user) & (IsiData.date_start == date_start)).execute()
+            else:
+                row_number = IsiData.insert(
+                    user=user,
+                    date_start=date_start,
+                    score=score,
+                    last_updated_by=user,
+                    last_updated=datetime.now(),
                 ).execute()
-        
             print(f'ISI data has been saved to SQL DB (row number: {row_number})')
             return True
         
@@ -813,7 +811,6 @@ def delete_user_isi_data(username: str, date_start):
         print(f'User {username} does not exist in SQL DB')
         return False
 
-# TODO finish this
 def get_user_isi_data(username: str, date_start: date):
     user = get_user_record(username)
     if user:
@@ -835,4 +832,91 @@ def get_user_isi_data(username: str, date_start: date):
             return False
     else:
         print(f'User {username} does not exist in SQL DB')
+        return False
+    
+def get_user_sleep_diary_data(username: str, entry_date: date):
+    user = get_user_record(username)
+    if user:
+        try:
+            sleep_diary_data_query = SleepDiaryData.select().where((SleepDiaryData.user == user) & (SleepDiaryData.entry_date == entry_date))
+            if sleep_diary_data_query.exists():
+                for sleep_diary_data in sleep_diary_data_query:
+                    return {
+                        'username': sleep_diary_data.user.username,
+                        'entry_date': sleep_diary_data.entry_date,
+                        'hours_slept': sleep_diary_data.hours_slept,
+                        'bedtime_start': sleep_diary_data.bedtime_start,
+                        'bedtime_end': sleep_diary_data.bedtime_end,
+                        'notes': sleep_diary_data.notes,
+                        'minutes_when_out_of_bed_after_waking': sleep_diary_data.minutes_when_out_of_bed_after_waking,
+                        'time_to_fall_asleep': sleep_diary_data.time_to_fall_asleep,
+                        'number_of_awakenings': sleep_diary_data.number_of_awakenings,
+                        'time_awake_during_night': sleep_diary_data.time_awake_during_night,
+                        'final_awakening_time': sleep_diary_data.final_awakening_time,
+                        'wake_earlier_than_desried': sleep_diary_data.wake_earlier_than_desried,
+                        'minutes_awake_earlier_than_desired': sleep_diary_data.minutes_awake_earlier_than_desired,
+                        'sleep_rating': sleep_diary_data.sleep_rating,
+                    }
+            else:
+                print(f'No sleep diary data found for {username} on date: {entry_date}')
+                return None
+        except Exception as e:
+            print(f'Sleep diary data has not been retrieved from SQL DB')
+            print(e)
+            return False
+
+def create_user_sleep_diary_data(username: str, CreateDataModel: CreateSleepDiaryData):
+    user = get_user_record(username)
+    if user:
+        try:
+            if get_user_sleep_diary_data(username, CreateDataModel.entry_date):
+                print(f'Sleep diary data already exists for {username} on date: {CreateDataModel.entry_date}')
+                row_number = SleepDiaryData.update(
+                    user=user,
+                    last_updated_by=user,
+                    last_updated=datetime.now(),
+                    entry_date = CreateDataModel.entry_date,
+                    hours_slept = CreateDataModel.hours_slept,
+                    bedtime_start = CreateDataModel.bedtime_start,
+                    bedtime_end = CreateDataModel.bedtime_end,
+                    notes=CreateDataModel.notes,
+                    minutes_when_out_of_bed_after_waking = CreateDataModel.minutes_when_out_of_bed_after_waking,
+                    time_to_fall_asleep = CreateDataModel.time_to_fall_asleep,
+                    number_of_awakenings = CreateDataModel.number_of_awakenings,
+                    time_awake_during_night = CreateDataModel.time_awake_during_night,
+                    final_awakening_time = CreateDataModel.final_awakening_time,
+                    wake_earlier_than_desried = CreateDataModel.wake_earlier_than_desried,
+                    minutes_awake_earlier_than_desired = CreateDataModel.minutes_awake_earlier_than_desired,
+                    sleep_rating = CreateDataModel.sleep_rating,
+                ).where((SleepDiaryData.user == user) & (SleepDiaryData.entry_date == CreateDataModel.entry_date)).execute()
+            else:
+                print('Sleep diary data does not exist')
+                row_number = SleepDiaryData.insert(
+                    user=user,
+                    last_updated_by=user,
+                    last_updated=datetime.now(),
+                    entry_date = CreateDataModel.entry_date,
+                    hours_slept = CreateDataModel.hours_slept,
+                    bedtime_start = CreateDataModel.bedtime_start,
+                    bedtime_end = CreateDataModel.bedtime_end,
+                    notes=CreateDataModel.notes,
+                    minutes_when_out_of_bed_after_waking = CreateDataModel.minutes_when_out_of_bed_after_waking,
+                    time_to_fall_asleep = CreateDataModel.time_to_fall_asleep,
+                    number_of_awakenings = CreateDataModel.number_of_awakenings,
+                    time_awake_during_night = CreateDataModel.time_awake_during_night,
+                    final_awakening_time = CreateDataModel.final_awakening_time,
+                    wake_earlier_than_desried = CreateDataModel.wake_earlier_than_desried,
+                    minutes_awake_earlier_than_desired = CreateDataModel.minutes_awake_earlier_than_desired,
+                    sleep_rating = CreateDataModel.sleep_rating,
+                ).execute()
+        
+            print(f'Sleep diary data has been saved to SQL DB (row number: {row_number})')
+            return True
+        
+        except Exception as e:
+            print(f'Sleep diary data has not been saved to SQL DB')
+            print(e)
+            return False
+    else:
+        print(f'User {CreateDataModel.username} does not exist in SQL DB')
         return False
