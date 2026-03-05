@@ -1,0 +1,8 @@
+typing
+pydantic
+# fastapi # Basic fastapi implementation
+fastapi[standard] # Fully featured developer implementation
+pyjwt
+# pyjwt[crypto] # Crypto version gives extended functionality to things like RSA and ECDSA
+bcrypt
+peewee

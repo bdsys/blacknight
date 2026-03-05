@@ -1,0 +1,9 @@
+release: aws-dmz-services
+namespace: aws-dmz-services
+accounts: tools
+environments: 
+  - eks_integration
+variables:
+  REPO_DIGEST: image.digest
+dependencies:
+  envoy-repo: "https://artifactory.concurtech.net/artifactory/helm-sandbox/"
